@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Alert, TextInput, View } from 'react-native';
+import { Alert, Switch, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button, Eyebrow, Screen, Title } from '@/components/ui';
+import { Segmented } from '@/components/segmented';
+import { Button, Card, Eyebrow, Heading, Screen, Title } from '@/components/ui';
 import { deleteMyAccount, sendCode, verifyCode } from '@/lib/api';
+import { setPrefs, usePrefs } from '@/lib/prefs';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/lib/use-session';
 import { useTheme } from '@/hooks/use-theme';
@@ -16,6 +18,7 @@ export default function You() {
         <Eyebrow>YOU</Eyebrow>
         <Title>{session ? 'Your account' : 'Sign in'}</Title>
       </View>
+      <Settings />
       {session ? <Account email={session.user.email ?? ''} /> : <SignIn />}
     </Screen>
   );
@@ -73,6 +76,39 @@ function Account({ email }: { email: string }) {
           { text: 'Cancel', style: 'cancel' },
           { text: 'Delete', style: 'destructive', onPress: () => deleteMyAccount().catch(() => {}) },
         ])} />
+    </View>
+  );
+}
+
+function Settings() {
+  const prefs = usePrefs();
+  const theme = useTheme();
+  const row = { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, minHeight: 44 };
+  return (
+    <View style={{ gap: 12 }}>
+      <Heading>Home shows</Heading>
+      <Segmented
+        label="Home shows"
+        value={prefs.home_view}
+        onChange={(v) => setPrefs({ home_view: v })}
+        options={[{ value: 'places', label: 'Breweries near me' }, { value: 'events', label: 'Tonight’s events' }]}
+      />
+      <Heading>Usually with</Heading>
+      <Card style={{ flexDirection: 'column', gap: 4 }}>
+        <View style={row}>
+          <ThemedText nativeID="kids-label">Kids</ThemedText>
+          <Switch accessibilityLabelledBy="kids-label" value={prefs.with_kids} onValueChange={(v) => setPrefs({ with_kids: v })}
+            trackColor={{ true: theme.amber }} />
+        </View>
+        <View style={row}>
+          <ThemedText nativeID="dog-label">A dog</ThemedText>
+          <Switch accessibilityLabelledBy="dog-label" value={prefs.with_dog} onValueChange={(v) => setPrefs({ with_dog: v })}
+            trackColor={{ true: theme.amber }} />
+        </View>
+        <ThemedText type="small" themeColor="textSecondary">
+          Places that don’t allow them drop out of your results. Places we can’t confirm stay in, marked unconfirmed.
+        </ThemedText>
+      </Card>
     </View>
   );
 }

@@ -4,8 +4,9 @@ import { Alert, Pressable, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Eyebrow, Heading, Screen, TierBadge, Title } from '@/components/ui';
-import { checkIn, cityProgress, getVenue, venueEvents, type Venue, type VenueEvent } from '@/lib/api';
+import { ASKABLE, checkIn, cityProgress, getVenue, venueEvents, venueStatus, type Venue, type VenueEvent } from '@/lib/api';
 import { clock } from '@/lib/format';
+import { drinkBadges, foodLine, groupLabels, seatingBadges } from '@/lib/group-fit';
 import { currentFix } from '@/lib/use-location';
 import { useSession } from '@/lib/use-session';
 
@@ -31,6 +32,7 @@ export default function VenueScreen() {
   const [events, setEvents] = useState<VenueEvent[]>([]);
   const [progress, setProgress] = useState<{ visited: number; total: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ open_now: boolean | null; closes_at: string | null } | null>(null);
 
   useEffect(() => {
     getVenue(id).then((v) => {
@@ -38,6 +40,7 @@ export default function VenueScreen() {
       if (session) cityProgress(v.market_id).then(setProgress).catch(() => {});
     });
     venueEvents(id, localDate()).then(setEvents).catch(() => {});
+    venueStatus(id).then(setStatus).catch(() => {});
   }, [id, session]);
 
   async function onCheckIn() {
@@ -54,9 +57,13 @@ export default function VenueScreen() {
           r.reason === 'too_far' ? 'Check in once you’re at the brewery.' : 'You checked in here in the last few hours.');
         return;
       }
+      const ask = ASKABLE.find(([k]) => (venue?.group_fit[k]?.value ?? 'unknown') === 'unknown');
       router.push({
         pathname: '/checked-in',
-        params: { venue: venue?.name ?? '', visited: r.visited, total: r.total, first: r.first_visit ? '1' : '', grant: r.reward_grant_id ?? '' },
+        params: {
+          venue: venue?.name ?? '', venueId: id, checkin: r.checkin_id, visited: r.visited, total: r.total,
+          first: r.first_visit ? '1' : '', grant: r.reward_grant_id ?? '', ask: ask?.[0] ?? '',
+        },
       });
     } catch (e) {
       Alert.alert('Check-in failed', e instanceof Error ? e.message : String(e));
@@ -78,7 +85,8 @@ export default function VenueScreen() {
       <View style={{ gap: 6 }}>
         {venue.town && <Eyebrow>{venue.town.toUpperCase()}</Eyebrow>}
         <Title>{venue.name}</Title>
-        <ThemedText type="small" themeColor="textSecondary">
+        <ThemedText type="small" themeColor={status?.open_now ? 'hop' : 'textSecondary'}>
+          {status?.open_now === true ? `Open till ${clock(status.closes_at)} · ` : status?.open_now === false ? 'Closed now · ' : ''}
           {venue.hours_source ? HOURS_LINE[venue.hours_source] : 'Hours not published'}
         </ThemedText>
       </View>
@@ -86,6 +94,8 @@ export default function VenueScreen() {
         <TierBadge tier={venue.tier} />
         <ThemedText type="small" style={{ flex: 1 }}>{TIER_LINE[venue.tier]}</ThemedText>
       </Card>
+
+      <WhatsHere venue={venue} truck={tonight.find((e) => /food truck/i.test(e.title))?.title ?? null} />
 
       <View style={{ gap: 8 }}>
         <Heading>Tonight</Heading>
@@ -117,6 +127,28 @@ function EventLine({ e, day }: { e: VenueEvent; day?: boolean }) {
     <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 8 }}>
       <ThemedText type="code" themeColor="amberInk" style={{ width: 72 }}>{when}</ThemedText>
       <ThemedText style={{ flex: 1 }}>{e.title}</ThemedText>
+    </View>
+  );
+}
+
+/** The decision points in the doc's order: food, non-beer drinks, NA, seating, kids and dogs. */
+function WhatsHere({ venue, truck }: { venue: Venue; truck: string | null }) {
+  const gf = venue.group_fit ?? {};
+  const rows: [string, string | null][] = [
+    ['Food', foodLine(gf, truck)],
+    ['Drinks', drinkBadges(gf).join(' · ') || null],
+    ['Seating', seatingBadges(gf).join(' · ') || null],
+    ['Kids and dogs', groupLabels(gf).join(' · ') || null],
+  ];
+  return (
+    <View style={{ gap: 8 }}>
+      <Heading>What’s here</Heading>
+      {rows.map(([label, value]) => (
+        <View key={label} style={{ flexDirection: 'row', gap: 12 }}>
+          <ThemedText type="smallBold" style={{ width: 104 }}>{label}</ThemedText>
+          <ThemedText type="small" themeColor={value ? 'text' : 'textSecondary'} style={{ flex: 1 }}>{value ?? 'Unconfirmed'}</ThemedText>
+        </View>
+      ))}
     </View>
   );
 }

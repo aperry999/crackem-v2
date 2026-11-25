@@ -36,6 +36,7 @@ export type Venue = {
   instagram_handle: string | null;
   hours: unknown;
   hours_source: 'website' | 'brewery' | null;
+  group_fit: GroupFit;
 };
 
 export type VenueEvent = {
@@ -73,7 +74,7 @@ export async function getVenue(id: string) {
   return unwrap(
     await supabase
       .from('venues')
-      .select('id, market_id, name, tier, town, website, instagram_handle, hours, hours_source')
+      .select('id, market_id, name, tier, town, website, instagram_handle, hours, hours_source, group_fit')
       .eq('id', id)
       .single(),
   ) as Venue;
@@ -126,3 +127,69 @@ export async function deleteMyAccount() {
   unwrap(await supabase.rpc('delete_my_account'));
   await supabase.auth.signOut();
 }
+
+export type GroupFit = Partial<Record<
+  'kids' | 'dogs' | 'kitchen' | 'food_trucks' | 'cocktails' | 'wine' | 'cider' | 'seltzer' |
+  'na_beer' | 'mocktails' | 'low_abv' | 'outdoor_seating' | 'covered_outdoor' | 'indoor_ac',
+  { value: string; types?: string[]; until?: string }
+>>;
+
+export type HomePlace = {
+  venue_id: string;
+  name: string;
+  tier: Tier;
+  town: string | null;
+  miles: number;
+  open_now: boolean | null;       // null = hours unknown
+  closes_at: string | null;
+  hours_source: 'website' | 'brewery' | null;
+  fits: boolean | null;           // null = unconfirmed for the saved group
+  group_fit: GroupFit;
+  food_tonight: string | null;    // today's food truck from the event feed
+  event_title: string | null;
+  event_starts_at: string | null;
+  event_on_now: boolean;
+};
+
+/** Location-based home: open breweries near you, ranked by the brewery decision points. */
+export async function homePlaces(lat: number, lon: number, group: { kids: boolean; dog: boolean }, radiusMi = 10) {
+  return unwrap(await supabase.rpc('home_places', {
+    p_lat: lat, p_lon: lon, p_radius_mi: radiusMi, p_kids: group.kids, p_dog: group.dog,
+  })) as HomePlace[];
+}
+
+export type Prefs = { home_view: 'places' | 'events'; with_kids: boolean; with_dog: boolean };
+
+export async function getProfilePrefs(userId: string) {
+  const { data } = await supabase.from('profiles').select('home_view, with_kids, with_dog').eq('id', userId).maybeSingle();
+  return data as Prefs | null;
+}
+
+export async function saveProfilePrefs(userId: string, prefs: Prefs) {
+  const { error } = await supabase.from('profiles').upsert({ id: userId, ...prefs });
+  if (error) throw new Error(error.message);
+}
+
+/** One answer after a check-in ("Do they serve NA beer?"), or a wrong-hours flag. */
+export async function reportAttribute(venueId: string, checkinId: number, attribute: string, value: string) {
+  const { error } = await supabase.from('attribute_reports').insert({
+    venue_id: venueId, checkin_id: checkinId, attribute, value,
+    user_id: (await supabase.auth.getUser()).data.user?.id,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function venueStatus(id: string) {
+  const rows = unwrap(await supabase.rpc('venue_status', { p_venue: id })) as { open_now: boolean | null; closes_at: string | null }[];
+  return rows[0] ?? { open_now: null, closes_at: null };
+}
+
+/** The one question asked after a check-in: the first decision-point field still unknown. */
+export const ASKABLE = [
+  ['kitchen', 'Do they serve food from their own kitchen?'],
+  ['cocktails', 'Do they serve cocktails?'],
+  ['na_beer', 'Do they have non-alcoholic beer?'],
+  ['mocktails', 'Do they have mocktails?'],
+  ['covered_outdoor', 'Is there covered outdoor seating?'],
+  ['indoor_ac', 'Is it air-conditioned inside?'],
+] as const;
