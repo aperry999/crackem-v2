@@ -7,6 +7,7 @@ Runs after builddata.py in the nightly run. Reads:
   <event-finder>/daily/markets.csv          the nightly cities
   <event-finder>/daily/venue-coords.csv     optional: venue_id,lat,lon,overture_id (Overture)
   <event-finder>/daily/venue-hours.json     optional: {venue_id: openingHoursSpecification} from websites
+  <event-finder>/group_fit/results/all.json optional: group-fit attributes (kids, dogs, food, drinks)
 
 Writes with the service key (SUPABASE_URL, SUPABASE_SERVICE_KEY env vars):
   markets, venues, events (upserts), then marks events that dropped out as gone.
@@ -96,6 +97,7 @@ def build(ef):
     hours_path = os.path.join(d, "venue-hours.json")
     hours = json.load(open(hours_path)) if os.path.exists(hours_path) else {}
     site = json.load(open(os.path.join(ef, "site_data.json")))
+    group_fit = load_group_fit(os.path.join(ef, "group_fit", "results", "all.json"))
 
     nightly = {m["market"].lower() for m in markets if m.get("market")}
     market_rows = [{
@@ -123,6 +125,8 @@ def build(ef):
             "overture_id": (c or {}).get("overture_id") or r.get("overture_id") or None,
             "location": point(c["lat"], c["lon"]) if c else None,
         }
+        gf = group_fit.get((r.get("instagram_handle") or "").lower().lstrip("@"))
+        row["group_fit"], row["group_fit_at"] = gf if gf else ({}, None)
         if r["venue_id"] in hours:
             row["hours"], row["hours_source"] = hours[r["venue_id"]], "website"
         venue_rows.append(row)
@@ -133,6 +137,19 @@ def build(ef):
     events = [e for e in site["events"] if e["city"].lower() in nightly]
     ev_rows, unmatched = event_rows(events, venue_by_name, tz_by_market)
     return market_rows, venue_rows, ev_rows, unmatched, no_coords
+
+
+def load_group_fit(path):
+    """{handle: (attributes without evidence, extracted_at)}. One handle can cover several venues."""
+    if not os.path.exists(path):
+        return {}
+    out = {}
+    for item in json.load(open(path)):
+        prof = item.get("profile", item)
+        attrs = {k: {f: v[f] for f in ("value", "types", "until", "confidence") if f in v}
+                 for k, v in (prof.get("attributes") or {}).items()}
+        out[prof["brewery_handle"].lower()] = (attrs, prof.get("extracted_at"))
+    return out
 
 
 class Rest:
