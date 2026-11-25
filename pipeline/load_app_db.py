@@ -5,7 +5,8 @@ Runs after builddata.py in the nightly run. Reads:
   <event-finder>/site_data.json            events for every market (from builddata.py)
   <event-finder>/daily/registry-venues.csv  the registry's Venues tab (one source of venues)
   <event-finder>/daily/markets.csv          the nightly cities
-  <event-finder>/daily/venue-coords.csv     optional: venue_id,lat,lon,overture_id (Overture)
+  <event-finder>/../<market>/<market>-venues-mapdata.csv  optional: venue_id,city,lat,lon,overture_id (city.py add)
+  <event-finder>/daily/venue-coords.csv     optional overrides: venue_id,lat,lon,overture_id,source,address
   <event-finder>/daily/venue-hours.json     optional: {venue_id: openingHoursSpecification} from websites
   <event-finder>/group_fit/results/all.json optional: group-fit attributes (kids, dogs, food, drinks)
 
@@ -93,7 +94,13 @@ def build(ef):
     d = os.path.join(ef, "daily")
     markets = read_csv(os.path.join(d, "markets.csv"))
     registry = read_csv(os.path.join(d, "registry-venues.csv"))
-    coords = {r["venue_id"]: r for r in read_csv(os.path.join(d, "venue-coords.csv"))}
+    # Pins: each city's <market>-venues-mapdata.csv (written by city.py add from Overture),
+    # then daily/venue-coords.csv on top (backfills and fixes). No pin = "location unconfirmed".
+    coords = {}
+    for m in markets:
+        mk = (m.get("market") or "").lower()
+        coords.update({r["venue_id"]: r for r in read_csv(os.path.join(ef, "..", mk, f"{mk}-venues-mapdata.csv"))})
+    coords.update({r["venue_id"]: r for r in read_csv(os.path.join(d, "venue-coords.csv"))})
     hours_path = os.path.join(d, "venue-hours.json")
     hours = json.load(open(hours_path)) if os.path.exists(hours_path) else {}
     site = json.load(open(os.path.join(ef, "site_data.json")))
@@ -119,8 +126,8 @@ def build(ef):
             "tier": (r.get("tier") or "listed").lower(),
             "instagram_handle": r.get("instagram_handle") or None,
             "website": r.get("website") or None,
-            "address": r.get("address") or None,
-            "town": r.get("town") or None,
+            "address": r.get("address") or (c or {}).get("address") or None,
+            "town": r.get("town") or (c or {}).get("city") or None,
             "google_place_id": r.get("google_place_id") or None,
             "overture_id": (c or {}).get("overture_id") or r.get("overture_id") or None,
             "location": point(c["lat"], c["lon"]) if c else None,

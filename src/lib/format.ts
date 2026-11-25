@@ -5,7 +5,9 @@ export function clock(iso: string | null) {
   return timeFmt.format(new Date(iso)).replace(':00', '').replace(' ', '').toLowerCase();
 }
 
-export function miles(m: number) {
+// null = no map pin yet (Overture had no match and the brewery hasn't set one)
+export function miles(m: number | null) {
+  if (m == null) return 'Location unconfirmed';
   return m < 0.95 ? `${m.toFixed(1)} mi` : `${Math.round(m * 10) / 10} mi`;
 }
 

@@ -13,7 +13,7 @@ export type FeedEvent = {
   venue_id: string;
   venue_name: string;
   tier: Tier;
-  miles: number;
+  miles: number | null;
 };
 
 export type NearbyVenue = {
@@ -139,7 +139,7 @@ export type HomePlace = {
   name: string;
   tier: Tier;
   town: string | null;
-  miles: number;
+  miles: number | null;
   open_now: boolean | null;       // null = hours unknown
   closes_at: string | null;
   hours_source: 'website' | 'brewery' | null;
