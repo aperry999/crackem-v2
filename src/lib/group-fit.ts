@@ -1,4 +1,5 @@
 import type { GroupFit } from './api';
+import { clock } from './format';
 
 const yes = (gf: GroupFit, k: keyof GroupFit) => gf[k]?.value === 'yes';
 
@@ -18,11 +19,38 @@ export function drinkBadges(gf: GroupFit) {
   return out;
 }
 
-/** "Food truck tonight: X", "Kitchen", or null. */
-export function foodLine(gf: GroupFit, truckTonight: string | null) {
-  if (truckTonight) return truckTonight.replace(/^food truck:\s*/i, 'Food truck tonight: ');
-  if (yes(gf, 'kitchen')) return 'Kitchen';
-  return null;
+export type FoodTonight = { title: string; starts_at: string | null; ends_at: string | null } | null;
+
+/** A food post is a truck unless the title reads like a deal or a dish night ("$1 Wing Wednesday"). */
+export function isTruck(title: string) {
+  if (/truck|trailer|\bcart\b/i.test(title)) return true;
+  return !/special|wings?\b|\$|bogo|brunch|pairing|deal|half off|% off|happy hour|\bnight\b|\bnite\b|day\b|menu|pie\b/i.test(title);
+}
+
+const spanLabel = (f: NonNullable<FoodTonight>, now: Date) => {
+  if (f.starts_at && new Date(f.starts_at) > now) {
+    return f.ends_at ? `${clock(f.starts_at)}–${clock(f.ends_at)}` : `from ${clock(f.starts_at)}`;
+  }
+  return f.ends_at ? `till ${clock(f.ends_at)}` : '';
+};
+
+/**
+ * The food line every place card shows (decision point 2). has: true = food tonight,
+ * false = known no food on site, null = we don't know. Unknown never reads as no.
+ */
+export function foodSummary(gf: GroupFit, food: FoodTonight, now = new Date()): { text: string; has: boolean | null } {
+  const kitchen = gf.kitchen?.value;
+  const trucks = gf.food_trucks?.value;
+  if (food) {
+    const name = food.title.replace(/^food truck:\s*/i, '').replace(/\s*food truck$/i, '');
+    const when = spanLabel(food, now);
+    const what = isTruck(food.title) ? `Food truck: ${name}` : name;
+    return { text: [kitchen === 'yes' ? 'Kitchen' : null, what + (when ? `, ${when}` : '')].filter(Boolean).join(' + '), has: true };
+  }
+  if (kitchen === 'yes') return { text: 'Kitchen', has: true };
+  if (trucks === 'regular') return { text: 'Usually a food truck · tonight’s not posted', has: null };
+  if (kitchen === 'no' && trucks === 'none') return { text: 'No food on site', has: false };
+  return { text: 'Food unconfirmed', has: null };
 }
 
 export function seatingBadges(gf: GroupFit) {

@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Eyebrow, Heading, Screen, TierBadge, Title } from '@/components/ui';
 import { ASKABLE, checkIn, cityProgress, getVenue, venueEvents, venueStatus, type Venue, type VenueEvent } from '@/lib/api';
 import { clock } from '@/lib/format';
-import { drinkBadges, foodLine, groupLabels, seatingBadges } from '@/lib/group-fit';
+import { drinkBadges, foodSummary, groupLabels, seatingBadges, type FoodTonight } from '@/lib/group-fit';
 import { currentFix } from '@/lib/use-location';
 import { useSession } from '@/lib/use-session';
 
@@ -95,7 +95,7 @@ export default function VenueScreen() {
         <ThemedText type="small" style={{ flex: 1 }}>{TIER_LINE[venue.tier]}</ThemedText>
       </Card>
 
-      <WhatsHere venue={venue} truck={tonight.find((e) => /food truck/i.test(e.title))?.title ?? null} />
+      <WhatsHere venue={venue} food={tonight.find((e) => e.category?.startsWith('food_truck') && (!e.ends_at || new Date(e.ends_at) > new Date())) ?? null} />
 
       <View style={{ gap: 8 }}>
         <Heading>Tonight</Heading>
@@ -132,10 +132,10 @@ function EventLine({ e, day }: { e: VenueEvent; day?: boolean }) {
 }
 
 /** The decision points in the doc's order: food, non-beer drinks, NA, seating, kids and dogs. */
-function WhatsHere({ venue, truck }: { venue: Venue; truck: string | null }) {
+function WhatsHere({ venue, food }: { venue: Venue; food: FoodTonight }) {
   const gf = venue.group_fit ?? {};
   const rows: [string, string | null][] = [
-    ['Food', foodLine(gf, truck)],
+    ['Food', (({ text, has }) => (has === null && text === 'Food unconfirmed' ? null : text))(foodSummary(gf, food))],
     ['Drinks', drinkBadges(gf).join(' · ') || null],
     ['Seating', seatingBadges(gf).join(' · ') || null],
     ['Kids and dogs', groupLabels(gf).join(' · ') || null],

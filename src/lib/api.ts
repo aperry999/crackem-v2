@@ -46,6 +46,7 @@ export type VenueEvent = {
   starts_at: string | null;
   ends_at: string | null;
   source: string | null;
+  category: string | null;
 };
 
 export type CheckInResult =
@@ -86,7 +87,7 @@ export async function venueEvents(id: string, fromDate: string, days = 7) {
   return unwrap(
     await supabase
       .from('events')
-      .select('id, title, event_date, starts_at, ends_at, source')
+      .select('id, title, event_date, starts_at, ends_at, source, category')
       .eq('venue_id', id)
       .gte('event_date', fromDate)
       .lte('event_date', to.toISOString().slice(0, 10))
@@ -145,7 +146,9 @@ export type HomePlace = {
   hours_source: 'website' | 'brewery' | null;
   fits: boolean | null;           // null = unconfirmed for the saved group
   group_fit: GroupFit;
-  food_tonight: string | null;    // today's food truck from the event feed
+  food_title: string | null;      // tonight's food truck or food special from the event feed
+  food_starts_at: string | null;
+  food_ends_at: string | null;
   event_title: string | null;
   event_starts_at: string | null;
   event_on_now: boolean;
